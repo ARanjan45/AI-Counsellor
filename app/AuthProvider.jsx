@@ -7,7 +7,7 @@ import { UserContext } from './_context/UserContext';
 
 function AuthProvider({children}) {
     const user=useUser();
-    const CreateUser=useMutation(api.users.Createuser)
+    const CreateUser=useMutation(api.users.CreateUser)
     const [userData, setUserData]=useState();
     useEffect(()=>{
         console.log(user)
