@@ -1,77 +1,167 @@
-import React from 'react'
-import { Button } from "@/components/ui/button"
+"use client"
+import React, { useState } from 'react'
 import {
     Dialog,
     DialogClose,
     DialogContent,
-    DialogDescription,
-    DialogFooter,
     DialogHeader,
     DialogTitle,
     DialogTrigger,
 } from "@/components/ui/dialog"
-import { Textarea } from '@/components/ui/textarea'
 import { ExpertOptions } from '@/services/Options'
 import Image from 'next/image'
-import { useStackApp } from '@stackframe/stack'
-import { useState } from 'react'
 import { useMutation } from 'convex/react'
 import { LoaderPinwheel } from 'lucide-react'
 import { api } from '@/convex/_generated/api'
 import { useRouter } from 'next/navigation'
+
 function UserInputDialog({ children, ExpertList }) {
-    const[feeling,setFeeling]=useState();
-    const [selectedExpert, setSelectedExpert] = useState();
-    const createDiscussionRoom=useMutation(api.DiscussionRoom.CreateNewRoom);
-    const [loading,setLoading]=useState(false);
-    const [openDialog,setOpenDialog]=useState(false)
-    const router=useRouter()
-    const onClickNext=async()=>{
+    const [feeling, setFeeling] = useState('');
+    const [selectedExpert, setSelectedExpert] = useState('');
+    const createDiscussionRoom = useMutation(api.DiscussionRoom.CreateNewRoom);
+    const [loading, setLoading] = useState(false);
+    const [openDialog, setOpenDialog] = useState(false);
+    const router = useRouter();
+
+    const onClickNext = async () => {
         setLoading(true);
-        const result=await createDiscussionRoom({
-            feeling:feeling,
-            feelingOption:ExpertList?.name,
-            expertName:selectedExpert
-        })
-        console.log(result);
+        const result = await createDiscussionRoom({
+            feeling: feeling,
+            feelingOption: ExpertList?.name,
+            expertName: selectedExpert
+        });
         setLoading(false);
         setOpenDialog(false);
         router.push('/discussion-room/' + result);
     }
+
     return (
         <Dialog open={openDialog} onOpenChange={setOpenDialog}>
-            <DialogTrigger>{children}</DialogTrigger>
-            <DialogContent>
+            <DialogTrigger asChild>
+                <div style={{ cursor: 'pointer', width: '100%' }}>{children}</div>
+            </DialogTrigger>
+            <DialogContent
+                className="z-[9999]"
+                style={{
+                    background: '#141820',
+                    border: '1px solid rgba(255,255,255,0.08)',
+                    borderRadius: 24,
+                    padding: 32,
+                    maxWidth: 460,
+                    fontFamily: "'DM Sans', sans-serif",
+                    color: '#e8e4dd',
+                }}
+            >
                 <DialogHeader>
-                    <DialogTitle>{ExpertList.name}</DialogTitle>
-                    <DialogDescription asChild>
-                        <div className='mt-3'>
-                            <h2>
-                                Tell us how you feel and we will start the {ExpertList.name} session for you straight away!
-                            </h2>
-                            <Textarea placeholder="I'm feeling..." className='mt-4' onChange={(e) => setFeeling(e.target.value)} />
-                            <h2 className='mt-5'>Choose an expert to connect with</h2>
-                            <div className='grid grid-cols-3 md:grid-cols-3 gap-6 mt-3'>
-                                {ExpertOptions.map((expert, index) => (
-                                    <div key={index} onClick={() => setSelectedExpert(expert.name)} className={`flex flex-col items-center gap-2 p-3 rounded-lg cursor-pointer border ${selectedExpert === expert.name ? 'border-blue-500' : 'border-gray-300'}`}>
-                                        <Image src={expert.avatar} alt={expert.name} width={100} height={100} className={`rounded-2xl h-[80px] w-[80px] object-covered inline-block hover:scale-105 transition-all cursor-pointer`} />
-                                        <h2 className='text-center'>{expert.name}</h2>
-                                    </div>
-
-                                ))}
-                            </div>
-                            <div className='flex gap-5 justify-end mt-5'>
-                            <DialogClose asChild>
-                                <Button variant={'ghost'}>Cancel</Button>
-                            </DialogClose>
-                                <Button disabled={(!feeling || !selectedExpert || loading)} onClick={onClickNext}>
-                                    {loading&&<LoaderPinwheel className='animate-spin'/>}
-                                    Next</Button>
-                            </div>
-
-                        </div>
-                    </DialogDescription>
+                    <DialogTitle style={{ fontFamily: "'Lora', serif", fontSize: '1.4rem', fontWeight: 600, color: '#e8e4dd' }}>
+                        {ExpertList.name}
+                    </DialogTitle>
                 </DialogHeader>
+
+                <p style={{ fontSize: '0.88rem', color: '#8a8a9a', lineHeight: 1.6, margin: '8px 0 0' }}>
+                    Tell us how you feel and we will start your {ExpertList.name} session right away.
+                </p>
+
+                <textarea
+                    placeholder="I'm feeling..."
+                    onChange={(e) => setFeeling(e.target.value)}
+                    rows={3}
+                    style={{
+                        width: '100%',
+                        marginTop: 16,
+                        background: 'rgba(255,255,255,0.04)',
+                        border: '1px solid rgba(255,255,255,0.1)',
+                        borderRadius: 14,
+                        color: '#e8e4dd',
+                        fontFamily: "'DM Sans', sans-serif",
+                        fontSize: '0.9rem',
+                        padding: '14px 16px',
+                        resize: 'none',
+                        outline: 'none',
+                        boxSizing: 'border-box',
+                    }}
+                />
+
+                <p style={{ fontSize: '0.75rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: '#8a8a9a', margin: '20px 0 12px' }}>
+                    Choose your counsellor
+                </p>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+                    {ExpertOptions.map((expert, index) => (
+                        <div
+                            key={index}
+                            onClick={() => setSelectedExpert(expert.name)}
+                            style={{
+                                display: 'flex',
+                                flexDirection: 'column',
+                                alignItems: 'center',
+                                gap: 8,
+                                padding: '14px 8px',
+                                borderRadius: 16,
+                                border: selectedExpert === expert.name ? '1px solid #7eb89a' : '1px solid rgba(255,255,255,0.08)',
+                                background: selectedExpert === expert.name ? 'rgba(126,184,154,0.1)' : 'rgba(255,255,255,0.03)',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s',
+                                boxShadow: selectedExpert === expert.name ? '0 0 16px rgba(126,184,154,0.15)' : 'none',
+                            }}
+                        >
+                            <Image
+                                src={expert.avatar}
+                                alt={expert.name}
+                                width={64}
+                                height={64}
+                                style={{ borderRadius: 12, objectFit: 'cover', width: 64, height: 64 }}
+                            />
+                            <span style={{
+                                fontSize: '0.8rem',
+                                color: selectedExpert === expert.name ? '#7eb89a' : '#8a8a9a',
+                                textAlign: 'center',
+                                fontFamily: "'DM Sans', sans-serif",
+                            }}>
+                                {expert.name}
+                            </span>
+                        </div>
+                    ))}
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 24 }}>
+                    <DialogClose asChild>
+                        <button style={{
+                            background: 'transparent',
+                            border: '1px solid rgba(255,255,255,0.1)',
+                            color: '#8a8a9a',
+                            padding: '10px 20px',
+                            borderRadius: 100,
+                            fontFamily: "'DM Sans', sans-serif",
+                            fontSize: '0.85rem',
+                            cursor: 'pointer',
+                        }}>
+                            Cancel
+                        </button>
+                    </DialogClose>
+                    <button
+                        disabled={!feeling || !selectedExpert || loading}
+                        onClick={onClickNext}
+                        style={{
+                            background: !feeling || !selectedExpert || loading ? 'rgba(126,184,154,0.3)' : '#7eb89a',
+                            color: '#0f1117',
+                            border: 'none',
+                            padding: '10px 24px',
+                            borderRadius: 100,
+                            fontFamily: "'DM Sans', sans-serif",
+                            fontSize: '0.85rem',
+                            fontWeight: 500,
+                            cursor: !feeling || !selectedExpert || loading ? 'not-allowed' : 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 8,
+                            transition: 'all 0.2s',
+                        }}
+                    >
+                        {loading && <LoaderPinwheel size={14} className="animate-spin" />}
+                        Begin session
+                    </button>
+                </div>
             </DialogContent>
         </Dialog>
     )

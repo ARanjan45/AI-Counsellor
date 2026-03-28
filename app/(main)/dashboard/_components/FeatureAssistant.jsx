@@ -1,59 +1,105 @@
 "use client"
-import React from 'react'
+import React, { useState } from 'react'
 import { useUser } from '@stackframe/stack'
-import { Button } from '@/components/ui/button';
 import { ExpertList } from '@/services/Options';
 import Image from 'next/image';
 import { BlurFade } from "@/components/ui/blur-fade"
 import UserInputDialog from './UserInputDialog';
+
+function ExpertCard({ option }) {
+    const [hovered, setHovered] = useState(false);
+    return (
+        <div
+            onMouseEnter={() => setHovered(true)}
+            onMouseLeave={() => setHovered(false)}
+            style={{
+                position: 'relative',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 12,
+                padding: '28px 16px',
+                borderRadius: 20,
+                background: hovered ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.03)',
+                border: hovered ? '1px solid rgba(126,184,154,0.3)' : '1px solid rgba(255,255,255,0.07)',
+                cursor: 'pointer',
+                overflow: 'hidden',
+                minHeight: 170,
+                width: '100%',
+                transition: 'all 0.3s ease',
+                transform: hovered ? 'translateY(-4px)' : 'translateY(0)',
+                boxShadow: hovered ? '0 8px 32px rgba(126,184,154,0.1)' : 'none',
+            }}
+        >
+            <div style={{
+                position: 'absolute', inset: 0,
+                background: 'radial-gradient(circle at 50% 0%, rgba(126,184,154,0.1), transparent 70%)',
+                opacity: hovered ? 1 : 0,
+                transition: 'opacity 0.3s',
+                borderRadius: 20,
+                pointerEvents: 'none',
+            }} />
+            <Image
+                src={option.icon}
+                alt={option.name}
+                width={64}
+                height={64}
+                style={{
+                    objectFit: 'contain',
+                    width: 64, height: 64,
+                    position: 'relative', zIndex: 1,
+                    transform: hovered ? 'scale(1.1)' : 'scale(1)',
+                    transition: 'transform 0.3s',
+                }}
+            />
+            <p style={{
+                position: 'relative', zIndex: 1,
+                fontSize: '0.82rem', fontWeight: 500,
+                color: hovered ? '#7eb89a' : '#8a8a9a',
+                textAlign: 'center', lineHeight: 1.4,
+                transition: 'color 0.3s', margin: 0,
+                fontFamily: "'DM Sans', sans-serif",
+            }}>
+                {option.name}
+            </p>
+            <div style={{
+                position: 'absolute', bottom: 0,
+                left: '50%', transform: 'translateX(-50%)',
+                width: hovered ? '60%' : '0%', height: 2,
+                background: 'linear-gradient(90deg, #7eb89a, #9d8ec4)',
+                borderRadius: 100,
+                transition: 'width 0.3s ease',
+            }} />
+        </div>
+    )
+}
+
 function FeatureAssistant() {
     const user = useUser();
     return (
         <div>
-            <div className='flex justify-between items-center'>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 36 }}>
                 <div>
-                    <h2 className='font-medium text-gray-500'>
+                    <p style={{ fontSize: '0.75rem', letterSpacing: '0.12em', textTransform: 'uppercase', color: '#7eb89a', marginBottom: 6, fontFamily: "'DM Sans', sans-serif" }}>
                         My Workspace
+                    </p>
+                    <h2 style={{ fontFamily: "'Lora', serif", fontSize: 'clamp(1.6rem, 3vw, 2.2rem)', fontWeight: 600, color: '#e8e4dd', lineHeight: 1.2, margin: 0 }}>
+                        Welcome back,{' '}
+                        <span style={{ color: '#7eb89a', fontStyle: 'italic' }}>{user?.displayName || 'friend'}</span>
                     </h2>
-                    <h2 className='text-3xl font-bold'>Welcome back, {user?.displayName || 'Guest'}!</h2>
-
                 </div>
-                <Button>
-                    Profile
-                </Button>
             </div>
-            <div className='grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 px-6 py-8'>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(175px, 1fr))', gap: 16 }}>
                 {ExpertList.map((option, index) => (
-                    <BlurFade key={index} delay={0.25 + index * 0.05} inView className="h-full">
+                    <BlurFade key={index} delay={0.1 + index * 0.08} inView>
                         <UserInputDialog ExpertList={option}>
-                            <div className='group relative flex flex-col items-center justify-center gap-4 p-6 rounded-2xl bg-secondary border border-white shadow-sm hover:shadow-xl hover:-translate-y-2 transition-all duration-300 cursor-pointer overflow-hidden h-[180px] w-full'>
-
-                                {/* Subtle glow on hover */}
-                                <div className='absolute inset-0 bg-gradient-to-br from-indigo-50 to-purple-50 opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-2xl' />
-
-                                {/* Image */}
-                                <Image
-                                    src={option.icon}
-                                    alt={option.name}
-                                    width={100}
-                                    height={100}
-                                    className='relative z-10 object-contain group-hover:scale-110 transition-transform duration-300'
-                                />
-
-                                {/* Name */}
-                                <h2 className='relative z-10 text-sm font-semibold text-gray-700 group-hover:text-indigo-700 text-center leading-tight transition-colors duration-300'>
-                                    {option.name}
-                                </h2>
-
-                                {/* Bottom accent bar */}
-                                <div className='absolute bottom-0 left-1/2 -translate-x-1/2 w-0 group-hover:w-3/4 h-[2px] bg-gradient-to-r from-indigo-400 to-purple-400 rounded-full transition-all duration-300' />
-                            </div>
+                            <ExpertCard option={option} />
                         </UserInputDialog>
                     </BlurFade>
                 ))}
             </div>
         </div>
-
     )
 }
 

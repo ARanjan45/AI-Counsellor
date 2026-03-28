@@ -12,6 +12,7 @@ export default defineSchema({
         feelingOption: v.string(),
         feeling: v.string(),
         expertName: v.string(),
-        conversation: v.optional(v.any()),  // "any" → "v.any()"
+        conversation: v.optional(v.any()),
+        feedback: v.optional(v.any()),
     })
 })

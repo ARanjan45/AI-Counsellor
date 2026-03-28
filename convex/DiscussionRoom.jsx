@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";  // ✅ import query
+import { mutation, query } from "./_generated/server";
 
 export const CreateNewRoom = mutation({
     args: {
@@ -17,12 +17,38 @@ export const CreateNewRoom = mutation({
     }
 })
 
-export const GetDiscussionRoom = query({  // ✅ remove the arrow function wrapper
+export const GetDiscussionRoom = query({
+    args: { id: v.id('DiscussionRoom') },
+    handler: async (ctx, args) => {
+        return await ctx.db.get(args.id);
+    }
+})
+
+export const SaveConversation = mutation({
     args: {
-        id: v.id('DiscussionRoom')
+        id: v.id('DiscussionRoom'),
+        conversation: v.any(),
     },
-    handler: async (ctx, args) => {  // ✅ add ctx and args params
-        const result = await ctx.db.get(args.id);
-        return result;
+    handler: async (ctx, args) => {
+        await ctx.db.patch(args.id, { conversation: args.conversation });
+    }
+})
+
+export const SaveFeedback = mutation({
+    args: {
+        id: v.id('DiscussionRoom'),
+        feedback: v.any(),
+    },
+    handler: async (ctx, args) => {
+        await ctx.db.patch(args.id, { feedback: args.feedback });
+    }
+})
+
+export const GetAllRooms = query({
+    args: { email: v.string() },
+    handler: async (ctx, args) => {
+        // Get all rooms — we'll filter by user email from users table
+        const rooms = await ctx.db.query('DiscussionRoom').collect();
+        return rooms;
     }
 })

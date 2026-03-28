@@ -6,11 +6,16 @@ import Feedback from './_components/Feedback'
 function Dashboard() {
   return (
     <div>
-        <FeatureAssistant/>
-        <div className='grid grid-cols-1 md:grid-cols-2 gap-10 mt-10'>
-          <History/>
-          <Feedback/>
-        </div>
+      <FeatureAssistant />
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+        gap: 20,
+        marginTop: 40
+      }}>
+        <History />
+        <Feedback />
+      </div>
     </div>
   )
 }
