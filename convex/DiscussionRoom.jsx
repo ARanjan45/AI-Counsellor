@@ -52,3 +52,9 @@ export const GetAllRooms = query({
         return rooms;
     }
 })
+export const DeleteRoom = mutation({
+    args: { id: v.id('DiscussionRoom') },
+    handler: async (ctx, args) => {
+        await ctx.db.delete(args.id);
+    }
+})

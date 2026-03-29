@@ -1,24 +1,30 @@
 "use client"
 import React, { useRef, useState, useEffect } from 'react';
 import { useParams } from 'next/navigation'
-import { useQuery } from 'convex/react'
+import { useQuery, useMutation } from 'convex/react'
 import { api } from '@/convex/_generated/api'
 import { ExpertOptions } from '@/services/Options';
 import { LoaderPinwheel } from 'lucide-react';
 import Image from 'next/image';
 import { UserButton } from '@stackframe/stack';
 import dynamic from 'next/dynamic';
-import { getToken, AIModel, textToSpeech } from '@/services/GlobalServices';
+import { getToken, AIModel, textToSpeech, generateFeedback } from '@/services/GlobalServices';
 const RecordRTC = dynamic(() => import('recordrtc'), { ssr: false });
 
 function DiscussionRoom() {
     const { roomid } = useParams();
     const DiscussionRoomData = useQuery(api.DiscussionRoom.GetDiscussionRoom, { id: roomid })
+    const saveConversation = useMutation(api.DiscussionRoom.SaveConversation);
+    const saveFeedback = useMutation(api.DiscussionRoom.SaveFeedback);
+
     const [expert, setExpert] = useState();
     const [enableMic, setEnableMic] = useState(false);
     const [transcribe, setTranscribe] = useState('');
     const [conversation, setConversation] = useState([]);
     const [aiLoading, setAiLoading] = useState(false);
+    const [feedbackData, setFeedbackData] = useState(null);
+    const [savingSession, setSavingSession] = useState(false);
+
     const recorder = useRef(null);
     const realtimeTranscriber = useRef(null);
     const silenceTimeout = useRef(null);
@@ -41,7 +47,6 @@ function DiscussionRoom() {
         conversationRef.current = conversation;
     }, [conversation]);
 
-    // Auto scroll chat to bottom
     useEffect(() => {
         chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [conversation, aiLoading]);
@@ -109,7 +114,7 @@ function DiscussionRoom() {
                             }
                             setTranscribe('');
                             texts.current = {};
-                        }, 1500);
+                        }, 3000);
                     }
                 }
             };
@@ -146,8 +151,9 @@ function DiscussionRoom() {
         try {
             isCancelled.current = true;
             isProcessing.current = false;
-            setAiLoading(true);
+            setAiLoading(false);
             stopCurrentAudio();
+
             if (realtimeTranscriber.current) { realtimeTranscriber.current.close(); realtimeTranscriber.current = null; }
             if (recorder.current) { recorder.current.pauseRecording(); recorder.current = null; }
             clearTimeout(aiCallTimeout.current);
@@ -156,10 +162,36 @@ function DiscussionRoom() {
             setTranscribe('');
             texts.current = {};
             setTimeout(() => window.speechSynthesis.cancel(), 500);
+
+            // Save conversation + generate feedback
+            const currentConversation = conversationRef.current;
+            if (currentConversation.length > 0) {
+                setSavingSession(true);
+                try {
+                    // Save conversation
+                    await saveConversation({
+                        id: roomid,
+                        conversation: currentConversation
+                    });
+
+                    // Generate feedback
+                    const feedback = await generateFeedback(currentConversation);
+                    if (feedback) {
+                        await saveFeedback({
+                            id: roomid,
+                            feedback: feedback
+                        });
+                        setFeedbackData(feedback);
+                    }
+                } catch (err) {
+                    console.error('Save error:', err);
+                } finally {
+                    setSavingSession(false);
+                }
+            }
+
         } catch (err) {
             console.error('Disconnect error:', err);
-        } finally {
-            setAiLoading(false);
         }
     }
 
@@ -176,242 +208,254 @@ function DiscussionRoom() {
                 </h2>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 20 }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 20 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 20 }}>
 
-                    {/* Left — Avatar panel */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                {/* Left — Avatar panel */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    <div style={{
+                        height: '60vh',
+                        background: 'rgba(255,255,255,0.03)',
+                        border: '1px solid rgba(255,255,255,0.07)',
+                        borderRadius: 28,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        position: 'relative',
+                        overflow: 'hidden',
+                    }}>
                         <div style={{
-                            height: '60vh',
-                            background: 'rgba(255,255,255,0.03)',
-                            border: '1px solid rgba(255,255,255,0.07)',
-                            borderRadius: 28,
-                            display: 'flex',
-                            flexDirection: 'column',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            position: 'relative',
-                            overflow: 'hidden',
+                            position: 'absolute', width: 200, height: 200, borderRadius: '50%',
+                            background: 'radial-gradient(circle, rgba(126,184,154,0.15), transparent 70%)',
+                            filter: 'blur(30px)', pointerEvents: 'none',
+                        }} />
+
+                        {expert?.avatar ? (
+                            <Image
+                                src={expert.avatar}
+                                alt="Avatar"
+                                width={200}
+                                height={200}
+                                style={{
+                                    width: 100, height: 100,
+                                    borderRadius: '50%',
+                                    objectFit: 'cover',
+                                    border: '2px solid rgba(126,184,154,0.3)',
+                                    animation: aiLoading ? 'avatarPulse 1.5s ease-in-out infinite' : 'none',
+                                    transition: 'box-shadow 0.3s',
+                                    position: 'relative', zIndex: 1,
+                                }}
+                            />
+                        ) : (
+                            <LoaderPinwheel style={{ color: '#7eb89a', animation: 'spin 1s linear infinite' }} />
+                        )}
+
+                        <p style={{ color: '#8a8a9a', marginTop: 12, fontSize: '0.9rem', position: 'relative', zIndex: 1 }}>
+                            {expert?.name}
+                        </p>
+
+                        {aiLoading && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, position: 'relative', zIndex: 1 }}>
+                                <LoaderPinwheel size={14} style={{ color: '#7eb89a', animation: 'spin 1s linear infinite' }} />
+                                <p style={{ fontSize: '0.82rem', color: '#7eb89a', margin: 0 }}>Thinking...</p>
+                            </div>
+                        )}
+
+                        {savingSession && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, position: 'relative', zIndex: 1 }}>
+                                <LoaderPinwheel size={14} style={{ color: '#9d8ec4', animation: 'spin 1s linear infinite' }} />
+                                <p style={{ fontSize: '0.82rem', color: '#9d8ec4', margin: 0 }}>Saving session...</p>
+                            </div>
+                        )}
+
+                        <div style={{
+                            position: 'absolute', bottom: 20, right: 20,
+                            background: 'rgba(255,255,255,0.06)',
+                            border: '1px solid rgba(255,255,255,0.1)',
+                            borderRadius: 12, padding: '8px 12px',
                         }}>
-                            {/* Ambient glow behind avatar */}
-                            <div style={{
-                                position: 'absolute',
-                                width: 200, height: 200,
-                                borderRadius: '50%',
-                                background: 'radial-gradient(circle, rgba(126,184,154,0.15), transparent 70%)',
-                                filter: 'blur(30px)',
-                                pointerEvents: 'none',
-                            }} />
-
-                            {expert?.avatar ? (
-                                <Image
-                                    src={expert.avatar}
-                                    alt="Avatar"
-                                    width={200}
-                                    height={200}
-                                    style={{
-                                        width: 100, height: 100,
-                                        borderRadius: '50%',
-                                        objectFit: 'cover',
-                                        border: '2px solid rgba(126,184,154,0.3)',
-                                        boxShadow: aiLoading ? '0 0 30px rgba(126,184,154,0.4)' : '0 0 0px transparent',
-                                        animation: aiLoading ? 'avatarPulse 1.5s ease-in-out infinite' : 'none',
-                                        transition: 'box-shadow 0.3s',
-                                        position: 'relative', zIndex: 1,
-                                    }}
-                                />
-                            ) : (
-                                <LoaderPinwheel style={{ color: '#7eb89a', animation: 'spin 1s linear infinite' }} />
-                            )}
-
-                            <p style={{ color: '#8a8a9a', marginTop: 12, fontSize: '0.9rem', position: 'relative', zIndex: 1 }}>
-                                {expert?.name}
-                            </p>
-
-                            {aiLoading && (
-                                <div style={{
-                                    display: 'flex', alignItems: 'center', gap: 8,
-                                    marginTop: 12, position: 'relative', zIndex: 1,
-                                }}>
-                                    <LoaderPinwheel size={14} style={{ color: '#7eb89a', animation: 'spin 1s linear infinite' }} />
-                                    <p style={{ fontSize: '0.82rem', color: '#7eb89a', margin: 0 }}>Thinking...</p>
-                                </div>
-                            )}
-
-                            {/* User button bottom right */}
-                            <div style={{
-                                position: 'absolute', bottom: 20, right: 20,
-                                background: 'rgba(255,255,255,0.06)',
-                                border: '1px solid rgba(255,255,255,0.1)',
-                                borderRadius: 12, padding: '8px 12px',
-                            }}>
-                                <UserButton />
-                            </div>
+                            <UserButton />
                         </div>
+                    </div>
 
-                        {/* Connect / Disconnect */}
-                        <div style={{ display: 'flex', justifyContent: 'center' }}>
-                            {!enableMic ? (
-                                <button
-                                    onClick={connecttoServer}
-                                    style={{
-                                        background: '#7eb89a',
-                                        color: '#0f1117',
-                                        border: 'none',
-                                        padding: '12px 36px',
-                                        borderRadius: 100,
-                                        fontFamily: "'DM Sans', sans-serif",
-                                        fontSize: '0.95rem',
-                                        fontWeight: 500,
-                                        cursor: 'pointer',
-                                        boxShadow: '0 0 24px rgba(126,184,154,0.3)',
-                                        transition: 'all 0.2s',
-                                    }}
-                                >
-                                    Connect
-                                </button>
-                            ) : (
-                                <button
-                                    onClick={disconnect}
-                                    style={{
-                                        background: 'rgba(220,80,80,0.15)',
-                                        color: '#e07070',
-                                        border: '1px solid rgba(220,80,80,0.3)',
-                                        padding: '12px 36px',
-                                        borderRadius: 100,
-                                        fontFamily: "'DM Sans', sans-serif",
-                                        fontSize: '0.95rem',
-                                        fontWeight: 500,
-                                        cursor: 'pointer',
-                                        transition: 'all 0.2s',
-                                    }}
-                                >
-                                    Disconnect
-                                </button>
-                            )}
-                        </div>
-
-                        {/* Live transcribe */}
-                        {transcribe && (
-                            <div style={{
-                                background: 'rgba(255,255,255,0.03)',
-                                border: '1px solid rgba(255,255,255,0.07)',
-                                borderRadius: 14,
-                                padding: '12px 16px',
-                                textAlign: 'center',
-                            }}>
-                                <p style={{ fontSize: '0.85rem', color: '#8a8a9a', fontStyle: 'italic', margin: 0 }}>
-                                    {transcribe}
-                                </p>
-                            </div>
+                    {/* Connect / Disconnect */}
+                    <div style={{ display: 'flex', justifyContent: 'center' }}>
+                        {!enableMic ? (
+                            <button
+                                onClick={connecttoServer}
+                                style={{
+                                    background: '#7eb89a', color: '#0f1117', border: 'none',
+                                    padding: '12px 36px', borderRadius: 100,
+                                    fontFamily: "'DM Sans', sans-serif", fontSize: '0.95rem',
+                                    fontWeight: 500, cursor: 'pointer',
+                                    boxShadow: '0 0 24px rgba(126,184,154,0.3)', transition: 'all 0.2s',
+                                }}
+                            >
+                                Connect
+                            </button>
+                        ) : (
+                            <button
+                                onClick={disconnect}
+                                style={{
+                                    background: 'rgba(220,80,80,0.15)', color: '#e07070',
+                                    border: '1px solid rgba(220,80,80,0.3)',
+                                    padding: '12px 36px', borderRadius: 100,
+                                    fontFamily: "'DM Sans', sans-serif", fontSize: '0.95rem',
+                                    fontWeight: 500, cursor: 'pointer', transition: 'all 0.2s',
+                                }}
+                            >
+                                Disconnect
+                            </button>
                         )}
                     </div>
 
-                    {/* Right — Chat panel */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    {transcribe && (
                         <div style={{
-                            height: '60vh',
                             background: 'rgba(255,255,255,0.03)',
                             border: '1px solid rgba(255,255,255,0.07)',
-                            borderRadius: 28,
-                            display: 'flex',
-                            flexDirection: 'column',
-                            overflow: 'hidden',
+                            borderRadius: 14, padding: '12px 16px', textAlign: 'center',
                         }}>
-                            {/* Chat header */}
-                            <div style={{
-                                padding: '16px 20px',
-                                borderBottom: '1px solid rgba(255,255,255,0.06)',
-                            }}>
-                                <p style={{ fontSize: '0.75rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: '#7eb89a', margin: 0 }}>
-                                    Live session
-                                </p>
-                            </div>
+                            <p style={{ fontSize: '0.85rem', color: '#8a8a9a', fontStyle: 'italic', margin: 0 }}>
+                                {transcribe}
+                            </p>
+                        </div>
+                    )}
 
-                            {/* Messages */}
-                            <div style={{
-                                flex: 1,
-                                overflowY: 'auto',
-                                padding: '16px',
-                                display: 'flex',
-                                flexDirection: 'column',
-                                gap: 10,
-                            }}>
-                                {conversation.length === 0 && (
-                                    <p style={{ fontSize: '0.85rem', color: '#8a8a9a', textAlign: 'center', marginTop: 40 }}>
-                                        Your conversation will appear here...
-                                    </p>
-                                )}
+                    {/* Feedback panel — shown after disconnect */}
+                    {feedbackData && (
+                        <div style={{
+                            background: 'rgba(255,255,255,0.03)',
+                            border: '1px solid rgba(126,184,154,0.2)',
+                            borderRadius: 20, padding: 24,
+                        }}>
+                            <p style={{ fontSize: '0.72rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: '#7eb89a', marginBottom: 6 }}>
+                                Session Complete
+                            </p>
+                            <h3 style={{ fontFamily: "'Lora', serif", fontSize: '1.1rem', color: '#e8e4dd', marginBottom: 16 }}>
+                                Your Feedback
+                            </h3>
 
-                                {conversation.map((item, i) => (
-                                    <div key={i} style={{
-                                        display: 'flex',
-                                        flexDirection: 'column',
-                                        alignItems: item.role === 'user' ? 'flex-end' : 'flex-start',
+                            {feedbackData.mood && (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                                    <span style={{ fontSize: '0.78rem', color: '#8a8a9a' }}>Mood:</span>
+                                    <span style={{
+                                        background: 'rgba(126,184,154,0.15)', border: '1px solid rgba(126,184,154,0.3)',
+                                        color: '#7eb89a', padding: '2px 12px', borderRadius: 100, fontSize: '0.8rem'
                                     }}>
-                                        <p style={{
-                                            fontSize: '0.72rem',
-                                            color: '#8a8a9a',
-                                            marginBottom: 4,
-                                            marginLeft: item.role === 'user' ? 0 : 4,
-                                            marginRight: item.role === 'user' ? 4 : 0,
-                                        }}>
-                                            {item.role === 'user' ? 'You' : expert?.name}
-                                        </p>
-                                        <div style={{
-                                            maxWidth: '85%',
-                                            padding: '10px 14px',
-                                            borderRadius: item.role === 'user' ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
-                                            background: item.role === 'user'
-                                                ? 'rgba(126,184,154,0.15)'
-                                                : 'rgba(255,255,255,0.05)',
-                                            border: item.role === 'user'
-                                                ? '1px solid rgba(126,184,154,0.2)'
-                                                : '1px solid rgba(255,255,255,0.07)',
-                                            color: '#e8e4dd',
-                                            fontSize: '0.85rem',
-                                            lineHeight: 1.55,
-                                        }}>
-                                            {item.content}
-                                        </div>
-                                    </div>
-                                ))}
+                                        {feedbackData.mood}
+                                    </span>
+                                </div>
+                            )}
 
-                                {/* AI typing indicator */}
-                                {aiLoading && (
-                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-                                        <p style={{ fontSize: '0.72rem', color: '#8a8a9a', marginBottom: 4, marginLeft: 4 }}>
-                                            {expert?.name}
-                                        </p>
-                                        <div style={{
-                                            padding: '12px 16px',
-                                            borderRadius: '16px 16px 16px 4px',
-                                            background: 'rgba(255,255,255,0.05)',
-                                            border: '1px solid rgba(255,255,255,0.07)',
-                                            display: 'flex',
-                                            gap: 5,
-                                            alignItems: 'center',
-                                        }}>
-                                            {[0, 150, 300].map((delay, i) => (
-                                                <div key={i} style={{
-                                                    width: 7, height: 7,
-                                                    borderRadius: '50%',
-                                                    background: '#7eb89a',
-                                                    animation: 'dotBounce 1.2s ease-in-out infinite',
-                                                    animationDelay: `${delay}ms`,
-                                                }} />
-                                            ))}
+                            {feedbackData.summary && (
+                                <p style={{ fontSize: '0.85rem', color: '#8a8a9a', lineHeight: 1.6, marginBottom: 14 }}>
+                                    {feedbackData.summary}
+                                </p>
+                            )}
+
+                            {feedbackData.keyPoints?.length > 0 && (
+                                <div style={{ marginBottom: 14 }}>
+                                    <p style={{ fontSize: '0.72rem', color: '#7eb89a', marginBottom: 6 }}>Key Points</p>
+                                    {feedbackData.keyPoints.map((p, i) => (
+                                        <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 4 }}>
+                                            <span style={{ color: '#7eb89a' }}>·</span>
+                                            <p style={{ fontSize: '0.83rem', color: '#e8e4dd', margin: 0 }}>{p}</p>
                                         </div>
-                                    </div>
-                                )}
-                                <div ref={chatEndRef} />
-                            </div>
+                                    ))}
+                                </div>
+                            )}
+
+                            {feedbackData.actionItems?.length > 0 && (
+                                <div>
+                                    <p style={{ fontSize: '0.72rem', color: '#9d8ec4', marginBottom: 6 }}>Action Items</p>
+                                    {feedbackData.actionItems.map((item, i) => (
+                                        <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 4 }}>
+                                            <span style={{ color: '#9d8ec4' }}>·</span>
+                                            <p style={{ fontSize: '0.83rem', color: '#e8e4dd', margin: 0 }}>{item}</p>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+
+                {/* Right — Chat panel */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    <div style={{
+                        height: '60vh',
+                        background: 'rgba(255,255,255,0.03)',
+                        border: '1px solid rgba(255,255,255,0.07)',
+                        borderRadius: 28,
+                        display: 'flex', flexDirection: 'column', overflow: 'hidden',
+                    }}>
+                        <div style={{ padding: '16px 20px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                            <p style={{ fontSize: '0.75rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: '#7eb89a', margin: 0 }}>
+                                Live session
+                            </p>
                         </div>
 
-                        <p style={{ fontSize: '0.78rem', color: '#8a8a9a', lineHeight: 1.5, margin: 0 }}>
-                            At the end of the session, feedback and key insights will be generated automatically.
-                        </p>
+                        <div className="chat-scroll" style={{
+                            flex: 1, overflowY: 'auto', padding: '16px',
+                            display: 'flex', flexDirection: 'column', gap: 10,
+                        }}>
+                            {conversation.length === 0 && (
+                                <p style={{ fontSize: '0.85rem', color: '#8a8a9a', textAlign: 'center', marginTop: 40 }}>
+                                    Your conversation will appear here...
+                                </p>
+                            )}
+
+                            {conversation.map((item, i) => (
+                                <div key={i} style={{
+                                    display: 'flex', flexDirection: 'column',
+                                    alignItems: item.role === 'user' ? 'flex-end' : 'flex-start',
+                                }}>
+                                    <p style={{
+                                        fontSize: '0.72rem', color: '#8a8a9a', marginBottom: 4,
+                                        marginLeft: item.role === 'user' ? 0 : 4,
+                                        marginRight: item.role === 'user' ? 4 : 0,
+                                    }}>
+                                        {item.role === 'user' ? 'You' : expert?.name}
+                                    </p>
+                                    <div style={{
+                                        maxWidth: '85%', padding: '10px 14px',
+                                        borderRadius: item.role === 'user' ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
+                                        background: item.role === 'user' ? 'rgba(126,184,154,0.15)' : 'rgba(255,255,255,0.05)',
+                                        border: item.role === 'user' ? '1px solid rgba(126,184,154,0.2)' : '1px solid rgba(255,255,255,0.07)',
+                                        color: '#e8e4dd', fontSize: '0.85rem', lineHeight: 1.55,
+                                    }}>
+                                        {item.content}
+                                    </div>
+                                </div>
+                            ))}
+
+                            {aiLoading && (
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+                                    <p style={{ fontSize: '0.72rem', color: '#8a8a9a', marginBottom: 4, marginLeft: 4 }}>
+                                        {expert?.name}
+                                    </p>
+                                    <div style={{
+                                        padding: '12px 16px', borderRadius: '16px 16px 16px 4px',
+                                        background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.07)',
+                                        display: 'flex', gap: 5, alignItems: 'center',
+                                    }}>
+                                        {[0, 150, 300].map((delay, i) => (
+                                            <div key={i} style={{
+                                                width: 7, height: 7, borderRadius: '50%', background: '#7eb89a',
+                                                animation: 'dotBounce 1.2s ease-in-out infinite',
+                                                animationDelay: `${delay}ms`,
+                                            }} />
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                            <div ref={chatEndRef} />
+                        </div>
                     </div>
+
+                    <p style={{ fontSize: '0.78rem', color: '#8a8a9a', lineHeight: 1.5, margin: 0 }}>
+                        At the end of the session, feedback and key insights will be generated automatically.
+                    </p>
                 </div>
             </div>
 
@@ -428,6 +472,8 @@ function DiscussionRoom() {
                     from { transform: rotate(0deg); }
                     to { transform: rotate(360deg); }
                 }
+                .chat-scroll::-webkit-scrollbar { display: none; }
+                .chat-scroll { -ms-overflow-style: none; scrollbar-width: none; }
             `}</style>
         </div>
     )
